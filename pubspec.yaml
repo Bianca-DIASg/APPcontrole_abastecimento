@@ -15,6 +15,11 @@ dependencies:
   firebase_core: ^4.2.1
   firebase_auth: ^6.1.2
   cloud_firestore: ^6.1.0
+  google_sign_in: ^7.2.0 # Necessário para Login com Google
+  flutter_facebook_auth: ^7.1.2 # Necessário para Login com Facebook
+  firebase_storage: ^13.0.4
+  firebase_messaging: ^16.0.4
+  firebase_database: ^12.0.4
 
 dev_dependencies:
   flutter_test:
