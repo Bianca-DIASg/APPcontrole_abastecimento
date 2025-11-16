@@ -1,13 +1,22 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/vehicle_provider.dart';
+import '../modelos/vehicle.dart';
 
-class VehiclesScreen extends StatelessWidget {
+class VehiclesScreen extends StatefulWidget {
   const VehiclesScreen({super.key});
 
-  CollectionReference get vehiclesRef {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    return FirebaseFirestore.instance.collection('users').doc(uid).collection('vehicles');
+  @override
+  State<VehiclesScreen> createState() => _VehiclesScreenState();
+}
+
+class _VehiclesScreenState extends State<VehiclesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<VehicleProvider>().loadVehicles();
+    });
   }
 
   @override
@@ -15,34 +24,31 @@ class VehiclesScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Meus Veículos')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddVehicleDialog(context),
+        onPressed: () => _addVehicleDialog(context),
         child: const Icon(Icons.add),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: vehiclesRef.snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+      body: Consumer<VehicleProvider>(
+        builder: (context, vehicleProvider, child) {
+          if (vehicleProvider.vehicles.isEmpty) {
+            return const Center(
+              child: Text('Nenhum veículo cadastrado.'),
+            );
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('Nenhum veículo cadastrado.'));
-          }
-          final vehicles = snapshot.data!.docs;
+
           return ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: vehicles.length,
-            itemBuilder: (_, index) {
-              final v = vehicles[index];
+            itemCount: vehicleProvider.vehicles.length,
+            itemBuilder: (_, i) {
+              final vehicle = vehicleProvider.vehicles[i];
+
               return Card(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 3,
+                margin: const EdgeInsets.all(8),
                 child: ListTile(
-                  title: Text('${v['marca']} ${v['modelo']}'),
-                  subtitle: Text('Placa: ${v['placa']}\nAno: ${v['ano']} - ${v['tipoCombustivel']}'),
+                  title: Text('${vehicle.marca} ${vehicle.modelo}'),
+                  subtitle: Text(
+                      'Placa: ${vehicle.placa}\nAno: ${vehicle.ano} - ${vehicle.tipoCombustivel}'),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => vehiclesRef.doc(v.id).delete(),
+                    onPressed: () => _confirmDelete(vehicle.id),
                   ),
                 ),
               );
@@ -53,18 +59,43 @@ class VehiclesScreen extends StatelessWidget {
     );
   }
 
-  void _showAddVehicleDialog(BuildContext context) {
+  void _confirmDelete(String vehicleId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar exclusão'),
+        content: const Text('Tem certeza que deseja excluir este veículo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<VehicleProvider>().deleteVehicle(vehicleId);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Veículo excluído')),
+              );
+            },
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addVehicleDialog(BuildContext context) {
     final formKey = GlobalKey<FormState>();
     final modeloController = TextEditingController();
     final marcaController = TextEditingController();
     final placaController = TextEditingController();
     final anoController = TextEditingController();
-    final combustivelController = TextEditingController();
+    String tipoCombustivel = 'Gasolina';
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Cadastrar Veículo'),
         content: SingleChildScrollView(
           child: Form(
@@ -72,50 +103,85 @@ class VehiclesScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTextField(modeloController, 'Modelo'),
-                _buildTextField(marcaController, 'Marca'),
-                _buildTextField(placaController, 'Placa'),
-                _buildTextField(anoController, 'Ano', isNumber: true),
-                _buildTextField(combustivelController, 'Tipo de combustível'),
+                TextFormField(
+                  controller: modeloController,
+                  decoration: const InputDecoration(labelText: 'Modelo'),
+                  validator: (v) => v!.isEmpty ? 'Digite o modelo' : null,
+                ),
+                TextFormField(
+                  controller: marcaController,
+                  decoration: const InputDecoration(labelText: 'Marca'),
+                  validator: (v) => v!.isEmpty ? 'Digite a marca' : null,
+                ),
+                TextFormField(
+                  controller: placaController,
+                  decoration: const InputDecoration(labelText: 'Placa'),
+                  validator: (v) => v!.isEmpty ? 'Digite a placa' : null,
+                ),
+                TextFormField(
+                  controller: anoController,
+                  decoration: const InputDecoration(labelText: 'Ano'),
+                  keyboardType: TextInputType.number,
+                  validator: (v) => v!.isEmpty ? 'Digite o ano' : null,
+                ),
+                const SizedBox(height: 16),
+                StatefulBuilder(
+                  builder: (context, setState) {
+                    return DropdownButtonFormField<String>(
+                      initialValue: tipoCombustivel,
+                      decoration: const InputDecoration(labelText: 'Tipo de Combustível'),
+                      items: const [
+                        DropdownMenuItem(value: 'Gasolina', child: Text('Gasolina')),
+                        DropdownMenuItem(value: 'Álcool', child: Text('Álcool')),
+                        DropdownMenuItem(value: 'Diesel', child: Text('Diesel')),
+                        DropdownMenuItem(value: 'GNV', child: Text('GNV')),
+                        DropdownMenuItem(value: 'Flex', child: Text('Flex')),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          tipoCombustivel = value!;
+                        });
+                      },
+                    );
+                  },
+                ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final uid = FirebaseAuth.instance.currentUser!.uid;
-                FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .collection('vehicles')
-                    .add({
-                  'modelo': modeloController.text,
-                  'marca': marcaController.text,
-                  'placa': placaController.text.toUpperCase(),
-                  'ano': int.tryParse(anoController.text) ?? 0,
-                  'tipoCombustivel': combustivelController.text,
-                });
-                Navigator.pop(ctx);
+                final vehicle = Vehicle(
+                  id: '',
+                  modelo: modeloController.text,
+                  marca: marcaController.text,
+                  placa: placaController.text,
+                  ano: int.tryParse(anoController.text) ?? 0,
+                  tipoCombustivel: tipoCombustivel,
+                );
+
+                try {
+                  await context.read<VehicleProvider>().addVehicle(vehicle);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Veículo cadastrado com sucesso!')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro ao cadastrar: $e')),
+                  );
+                }
               }
             },
             child: const Text('Salvar'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextField(TextEditingController controller, String label, {bool isNumber = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-        decoration: InputDecoration(labelText: label),
-        validator: (v) => v == null || v.isEmpty ? 'Informe $label' : null,
       ),
     );
   }
