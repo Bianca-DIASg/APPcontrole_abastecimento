@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:controle_abastecimento/providers/app_provider.dart';
-import 'package:controle_abastecimento/screens/register_screen.dart';
-import 'package:controle_abastecimento/screens/home_screen.dart';
+import '../providers/auth_provider.dart';
+import 'register_screen.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,99 +12,101 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _senha = TextEditingController();
-  String? _error;
-
-  Future<void> _submit() async {
-    setState(() => _error = null);
-    if (!_formKey.currentState!.validate()) return;
-
-    final provider = context.read<AppProvider>();
-    final ok = await provider.login(_email.text.trim(), _senha.text);
-
-    if (ok) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
-    } else {
-      setState(() => _error = 'E-mail ou senha incorretos.');
-    }
-  }
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _senha.dispose();
-    super.dispose();
-  }
+  final email = TextEditingController();
+  final senha = TextEditingController();
+  bool loading = false;
 
   @override
   Widget build(BuildContext context) {
-    final loading = context.watch<AppProvider>().loading;
+    const primary = Color(0xFF89CFF0);
 
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Card(
-              elevation: 12,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Entrar', style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(labelText: 'E-mail'),
-                        validator: (v) => (v == null || !v.contains('@')) ? 'E-mail inválido' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _senha,
-                        obscureText: true,
-                        decoration: const InputDecoration(labelText: 'Senha'),
-                        validator: (v) => (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 10),
-                        Text(_error!, style: const TextStyle(color: Colors.red)),
-                      ],
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: loading ? null : _submit,
-                        child: loading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Entrar'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                        ),
-                        child: const Text('Criar conta'),
-                      ),
-                    ],
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              children: [
+                Icon(Icons.local_gas_station_rounded,
+                    size: 90, color: primary),
+                const SizedBox(height: 20),
+                Text("Controle de Abastecimento",
+                    style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: 30),
+
+                TextField(
+                  controller: email,
+                  decoration: InputDecoration(
+                    labelText: "E-mail",
+                    prefixIcon: const Icon(Icons.email),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
+
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: senha,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: "Senha",
+                    prefixIcon: const Icon(Icons.lock),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: loading ? null : () async {
+                      setState(() => loading = true);
+
+                      final ok = await context
+                          .read<AuthProvider>()
+                          .login(email.text.trim(), senha.text.trim());
+
+                      setState(() => loading = false);
+
+                      if (ok) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const HomeScreen(),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content:
+                                  Text("E-mail ou senha inválidos!")),
+                        );
+                      }
+                    },
+                    child: loading
+                        ? const CircularProgressIndicator()
+                        : const Text("Entrar"),
+                  ),
+                ),
+
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(context,
+                      MaterialPageRoute(
+                        builder: (_) => const RegisterScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text("Criar conta"),
+                ),
+              ],
             ),
           ),
         ),
